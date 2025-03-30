@@ -1,0 +1,116 @@
+// Simulación de barbería con interrupciones y Mbed OS
+
+#include "mbed.h"
+#include "mbed_events.h"
+#include "platform/mbed_thread.h"
+#include "rtos.h"
+#include "chrono"
+
+using namespace std::chrono_literals;  // Usar las unidades de tiempo como 100ms, 1s, etc.
+
+// Simulación de LEDs para asientos
+DigitalOut asientos[8] = {p8, p9, p10, p11, p12, p13, p14, p15};
+
+// Interrupciones para llegada de clientes y alarma 
+InterruptIn boton_adulto(p5);
+InterruptIn boton_nino(p6);
+InterruptIn alarma_incendio(p7);
+
+// Semáforo para la capacidad de la sala de espera
+Semaphore sala_espera(8);
+Mutex mutex_barbero;
+
+// Variables del estado de la barbería
+struct {
+    int asientos_ocupados = 0;
+    int adultos_en_espera = 0;
+    int ninos_en_espera = 0;
+    bool emergencia = false;
+} estado;
+
+// Función para actualizar los LEDs de los asientos
+void actualizar_leds() {
+    for (int i = 0; i < 8; i++) {
+        asientos[i] = (i < estado.asientos_ocupados) ? 1 : 0;
+    }
+}
+
+// Atender a un adulto
+void llegada_adulto() {
+    if (sala_espera.try_acquire()) {
+        printf("Adulto entró a la sala de espera.\n");
+        estado.asientos_ocupados++;
+        estado.adultos_en_espera++;
+        actualizar_leds();
+        
+        ThisThread::sleep_for(1s);
+        if (mutex_barbero.trylock()) {
+            printf("Adulto está siendo atendido.\n");
+            ThisThread::sleep_for(12s);
+            mutex_barbero.unlock();
+            printf("Adulto salió de la barbería.\n");
+            
+            estado.asientos_ocupados--;
+            estado.adultos_en_espera--;
+            actualizar_leds();
+        }
+        sala_espera.release();
+    } else {
+        printf("No hay espacio en la sala de espera para el adulto.\n");
+    }
+}
+
+// Atender a un niño y su padre
+void llegada_nino() {
+    if (sala_espera.try_acquire(2)) { // Niño + padre ocupan 2 asientos
+        printf("Niño y padre entraron a la sala de espera.\n");
+        estado.asientos_ocupados += 2;
+        estado.ninos_en_espera++;
+        actualizar_leds();
+        
+        ThisThread::sleep_for(1s);
+        if (mutex_barbero.trylock()) {
+            printf("Niño está siendo atendido.\n");
+            ThisThread::sleep_for(12s);
+            mutex_barbero.unlock();
+            printf("Niño y padre salieron de la barbería.\n");
+            
+            estado.asientos_ocupados -= 2;
+            estado.ninos_en_espera--;
+            actualizar_leds();
+        }
+        sala_espera.release(2);
+    } else {
+        printf("No hay espacio en la sala de espera para niño y padre.\n");
+    }
+}
+
+// Manejar la emergencia de incendio
+void evacuacion_incendio() {
+    printf("¡Alarma de incendio activada! ¡Todos evacuen!\n");
+    estado.emergencia = true;
+    while (sala_espera.get_count() < 8) {
+        sala_espera.release();
+    }
+    estado.asientos_ocupados = 0;
+    estado.adultos_en_espera = 0;
+    estado.ninos_en_espera = 0;
+    printf("Todos los asientos están libres.\n");
+    actualizar_leds();
+    
+    // Resetear emergencia después de 5 segundos
+    ThisThread::sleep_for(5000ms);
+    estado.emergencia = false;
+    printf("Emergencia finalizada.\n");
+    actualizar_leds();
+}
+
+int main() {
+    boton_adulto.rise(&llegada_adulto);
+    boton_nino.rise(&llegada_nino);
+    alarma_incendio.rise(&evacuacion_incendio);
+
+    while (true) {
+        ThisThread::sleep_for(1s);
+    }
+}  
