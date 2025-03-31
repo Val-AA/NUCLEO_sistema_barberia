@@ -9,12 +9,12 @@
 using namespace std::chrono_literals;  // Usar las unidades de tiempo como 100ms, 1s, etc.
 
 // Simulación de LEDs para asientos
-DigitalOut asientos[8] = {p8, p9, p10, p11, p12, p13, p14, p15};
+DigitalOut asientos[8] = {D8, D9, D10, D11, D12, D13, D14, D15};
 
 // Interrupciones para llegada de clientes y alarma 
-InterruptIn boton_adulto(p5);
-InterruptIn boton_nino(p6);
-InterruptIn alarma_incendio(p7);
+InterruptIn boton_adulto(D5);
+InterruptIn boton_nino(D6);
+InterruptIn alarma_incendio(D7);
 
 // Semáforo para la capacidad de la sala de espera
 Semaphore sala_espera(8);
